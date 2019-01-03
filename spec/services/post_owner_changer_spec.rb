@@ -26,7 +26,7 @@ describe PostOwnerChanger do
       freeze_time 2.days.from_now
 
       old_user = p1.user
-      PostAction.act(user_a, p1, PostActionType.types[:like])
+      PostActionCreator.like(user_a, p1)
       p1.reload
       expect(p1.topic.like_count).to eq(1)
       PostOwnerChanger.new(post_ids: [p1.id], topic_id: topic.id, new_owner: user_a, acting_user: editor).change_owner!
@@ -138,7 +138,7 @@ describe PostOwnerChanger do
       end
 
       it "updates users' topic and post counts" do
-        PostAction.act(p2user, p1, PostActionType.types[:like])
+        PostActionCreator.like(p2user, p1)
         expect(p1user.user_stat.reload.likes_received).to eq(1)
 
         change_owners
@@ -193,7 +193,7 @@ describe PostOwnerChanger do
         let(:topic) { Fabricate(:private_message_topic) }
 
         it "should update users' counts" do
-          PostAction.act(p2user, p1, PostActionType.types[:like])
+          PostActionCreator.like(p2user, p1)
 
           expect {
             change_owners

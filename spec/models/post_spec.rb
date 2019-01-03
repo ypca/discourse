@@ -1,5 +1,4 @@
 require 'rails_helper'
-require_dependency 'post_destroyer'
 
 describe Post do
   before { Oneboxer.stubs :onebox }
@@ -142,31 +141,31 @@ describe Post do
     let(:admin) { Fabricate(:admin) }
 
     it 'is_flagged? is accurate' do
-      PostAction.act(user, post, PostActionType.types[:off_topic])
+      PostActionCreator.create(user, post, :off_topic)
       post.reload
       expect(post.is_flagged?).to eq(true)
 
-      PostAction.remove_act(user, post, PostActionType.types[:off_topic])
+      PostActionDestroyer.destroy(user, post, :off_topic)
       post.reload
       expect(post.is_flagged?).to eq(false)
     end
 
     it 'is_flagged? is true if flag was deferred' do
-      PostAction.act(user, post, PostActionType.types[:off_topic])
+      PostActionCreator.create(user, post, :off_topic)
       PostAction.defer_flags!(post.reload, admin)
       post.reload
       expect(post.is_flagged?).to eq(true)
     end
 
     it 'is_flagged? is true if flag was cleared' do
-      PostAction.act(user, post, PostActionType.types[:off_topic])
+      PostActionCreator.create(user, post, :off_topic)
       PostAction.clear_flags!(post.reload, admin)
       post.reload
       expect(post.is_flagged?).to eq(true)
     end
 
     it 'has_active_flag? is false for deferred flags' do
-      PostAction.act(user, post, PostActionType.types[:spam])
+      PostActionCreator.create(user, post, :spam)
       post.reload
       expect(post.has_active_flag?).to eq(true)
 
@@ -176,7 +175,7 @@ describe Post do
     end
 
     it 'has_active_flag? is false for cleared flags' do
-      PostAction.act(user, post, PostActionType.types[:spam])
+      PostActionCreator.create(user, post, :spam)
       PostAction.clear_flags!(post.reload, admin)
       post.reload
       expect(post.has_active_flag?).to eq(false)

@@ -93,12 +93,12 @@ describe TopicView do
       expect(best.posts.count).to eq(0)
 
       # It doesn't count likes from admins
-      PostAction.act(admin, p3, PostActionType.types[:like])
+      PostActionCreator.like(admin, p3)
       best = TopicView.new(topic.id, nil, best: 99, only_moderator_liked: true)
       expect(best.posts.count).to eq(0)
 
       # It should find the post liked by the moderator
-      PostAction.act(moderator, p2, PostActionType.types[:like])
+      PostActionCreator.like(moderator, p2)
       best = TopicView.new(topic.id, nil, best: 99, only_moderator_liked: true)
       expect(best.posts.count).to eq(1)
 
@@ -245,7 +245,7 @@ describe TopicView do
       end
 
       it 'returns the like' do
-        PostAction.act(evil_trout, p1, PostActionType.types[:like])
+        PostActionCreator.like(evil_trout, p1)
         expect(topic_view.all_post_actions[p1.id][PostActionType.types[:like]]).to be_present
       end
     end
@@ -256,15 +256,15 @@ describe TopicView do
       end
 
       it 'returns the active flags' do
-        PostAction.act(moderator, p1, PostActionType.types[:off_topic])
-        PostAction.act(evil_trout, p1, PostActionType.types[:off_topic])
+        PostActionCreator.create(moderator, p1, :off_topic)
+        PostActionCreator.create(evil_trout, p1, :off_topic)
 
         expect(topic_view.all_active_flags[p1.id][PostActionType.types[:off_topic]].count).to eq(2)
       end
 
       it 'returns only the active flags' do
-        PostAction.act(moderator, p1, PostActionType.types[:off_topic])
-        PostAction.act(evil_trout, p1, PostActionType.types[:off_topic])
+        PostActionCreator.create(moderator, p1, :off_topic)
+        PostActionCreator.create(evil_trout, p1, :off_topic)
 
         PostAction.defer_flags!(p1, moderator)
 

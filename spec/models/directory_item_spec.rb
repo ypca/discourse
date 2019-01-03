@@ -58,7 +58,7 @@ describe DirectoryItem do
 
       user2 = Fabricate(:user)
 
-      PostAction.act(user2, post, PostActionType.types[:like])
+      PostActionCreator.like(user2, post)
 
       DirectoryItem.refresh!
 

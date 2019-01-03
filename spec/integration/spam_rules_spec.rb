@@ -24,7 +24,7 @@ describe SpamRulesEnforcer do
         let!(:spam_post2) { create_post(user: spammer) }
 
         before do
-          PostAction.act(user1, spam_post, PostActionType.types[:spam])
+          PostActionCreator.create(user1, spam_post, :spam)
         end
 
         it 'should not hide the post' do
@@ -33,7 +33,7 @@ describe SpamRulesEnforcer do
 
         context 'spam posts are flagged enough times, but not by enough users' do
           it 'should not hide the post' do
-            PostAction.act(user1, spam_post2, PostActionType.types[:spam])
+            PostActionCreator.create(user1, spam_post2, :spam)
 
             expect(spam_post.reload).to_not be_hidden
             expect(spam_post2.reload).to_not be_hidden
@@ -47,7 +47,7 @@ describe SpamRulesEnforcer do
           let!(:mod_pm_count)           { moderator.private_topics_count }
 
           before do
-            PostAction.act(user2, spam_post, PostActionType.types[:spam])
+            PostActionCreator.create(user2, spam_post, :spam)
 
             expect(Guardian.new(spammer).can_create_topic?(nil)).to be(false)
             expect { PostCreator.create(spammer, title: 'limited time offer for you', raw: 'better buy this stuff ok', archetype_id: 1) }.to raise_error(Discourse::InvalidAccess)
@@ -90,7 +90,7 @@ describe SpamRulesEnforcer do
         context 'flags_required_to_hide_post takes effect too' do
           it 'should silence the spammer' do
             SiteSetting.flags_required_to_hide_post = 2
-            PostAction.act(user2, spam_post, PostActionType.types[:spam])
+            PostActionCreator.create(user2, spam_post, :spam)
             expect(spammer.reload).to be_silenced
             expect(Guardian.new(spammer).can_create_topic?(nil)).to be false
           end
@@ -106,8 +106,8 @@ describe SpamRulesEnforcer do
         let!(:private_messages_count) { spammer.private_topics_count }
 
         it 'should not allow spammer to create new posts' do
-          PostAction.act(user1, spam_post, PostActionType.types[:spam])
-          PostAction.act(user2, spam_post, PostActionType.types[:spam])
+          PostActionCreator.create(user1, spam_post, :spam)
+          PostActionCreator.create(user2, spam_post, :spam)
 
           expect(spam_post.reload).to_not be_hidden
           expect(Guardian.new(spammer).can_create_topic?(nil)).to be(true)
@@ -124,8 +124,8 @@ describe SpamRulesEnforcer do
         let!(:private_messages_count) { spammer.private_topics_count }
 
         it 'should not hide the post' do
-          PostAction.act(user1, spam_post, PostActionType.types[:spam])
-          PostAction.act(user2, spam_post, PostActionType.types[:spam])
+          PostActionCreator.create(user1, spam_post, :spam)
+          PostActionCreator.create(user2, spam_post, :spam)
 
           expect(spam_post.reload).to_not be_hidden
         end

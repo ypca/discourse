@@ -43,7 +43,7 @@ describe UserSummary do
 
     liked_post = create_post
     user = Fabricate(:user)
-    PostAction.act(user, liked_post, PostActionType.types[:like])
+    PostActionCreator.like(user, liked_post)
 
     users = UserSummary.new(user, Guardian.new).most_liked_users
 

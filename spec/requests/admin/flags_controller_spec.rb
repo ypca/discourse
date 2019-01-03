@@ -23,7 +23,7 @@ RSpec.describe Admin::FlagsController do
     end
 
     it 'should return the right response' do
-      PostAction.act(user, post_1, PostActionType.types[:spam])
+      PostActionCreator.create(user, post_1, :spam)
 
       get '/admin/flags.json'
 
@@ -39,7 +39,7 @@ RSpec.describe Admin::FlagsController do
     it 'should raise a reasonable error if a flag was deferred and then someone else agreed' do
       SiteSetting.queue_jobs = false
 
-      _post_action = PostAction.act(user, post_1, PostActionType.types[:spam], message: 'bad')
+      PostActionCreator.new(user, post_1, PostActionType.types[:spam], message: 'bad').perform
 
       post "/admin/flags/defer/#{post_1.id}.json"
       expect(response.status).to eq(200)
@@ -54,7 +54,7 @@ RSpec.describe Admin::FlagsController do
     it 'should be able to agree and keep content' do
       SiteSetting.queue_jobs = false
 
-      post_action = PostAction.act(user, post_1, PostActionType.types[:spam], message: 'bad')
+      post_action = PostActionCreator.new(user, post_1, PostActionType.types[:spam], message: 'bad').perform.post_action
 
       post "/admin/flags/agree/#{post_1.id}.json", params: { action_on_post: 'keep' }
       expect(response.status).to eq(200)
@@ -71,7 +71,7 @@ RSpec.describe Admin::FlagsController do
       SiteSetting.allow_user_locale = true
       SiteSetting.queue_jobs = false
 
-      post_action = PostAction.act(user, post_1, PostActionType.types[:spam], message: 'bad')
+      post_action = PostActionCreator.new(user, post_1, PostActionType.types[:spam], message: 'bad').perform.post_action
       admin.update!(locale: 'ja')
 
       post "/admin/flags/agree/#{post_1.id}.json", params: { action_on_post: 'delete' }
@@ -93,7 +93,7 @@ RSpec.describe Admin::FlagsController do
       SiteSetting.queue_jobs = false
       category.update_column(:topic_id, first_post.topic_id)
 
-      PostAction.act(user, first_post, PostActionType.types[:spam], message: 'bad')
+      PostActionCreator.new(user, first_post, PostActionType.types[:spam], message: 'bad').perform
 
       post "/admin/flags/agree/#{first_post.id}.json", params: { action_on_post: 'delete' }
       expect(response.status).to eq(403)

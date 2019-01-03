@@ -89,12 +89,12 @@ describe UserDestroyer do
       end
     end
 
-    context "with a queued post" do
-      let!(:qp) { Fabricate(:queued_post, user: user) }
+    context "with a reviewable post" do
+      let!(:reviewable) { Fabricate(:reviewable, created_by: user) }
 
       it "removes the queued post" do
         UserDestroyer.new(admin).destroy(user)
-        expect(QueuedPost.where(user_id: user.id).count).to eq(0)
+        expect(Reviewable.where(created_by_id: user.id).count).to eq(0)
       end
     end
 
@@ -179,7 +179,7 @@ describe UserDestroyer do
 
             it "agrees with flags on user's posts" do
               spammer_post = Fabricate(:post, user: @user)
-              flag = PostAction.act(@admin, spammer_post, PostActionType.types[:inappropriate])
+              flag = PostActionCreator.create(@admin, spammer_post, :inappropriate).post_action
               expect(flag.agreed_at).to eq(nil)
 
               destroy
@@ -335,7 +335,7 @@ describe UserDestroyer do
       before do
         @topic = Fabricate(:topic, user: Fabricate(:user))
         @post = Fabricate(:post, user: @topic.user, topic: @topic)
-        @like = PostAction.act(@user, @post, PostActionType.types[:like])
+        PostActionCreator.like(@user, @post)
       end
 
       it 'should destroy the like' do

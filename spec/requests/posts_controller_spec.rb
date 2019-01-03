@@ -248,8 +248,8 @@ describe PostsController do
         let(:moderator) { Fabricate(:moderator) }
 
         before do
-          PostAction.act(moderator, post1, PostActionType.types[:off_topic])
-          PostAction.act(moderator, post2, PostActionType.types[:off_topic])
+          PostActionCreator.create(moderator, post1, :off_topic)
+          PostActionCreator.create(moderator, post2, :off_topic)
           Jobs::SendSystemMessage.clear
         end
 
@@ -452,7 +452,7 @@ describe PostsController do
       end
 
       context "removing a bookmark" do
-        let(:post_action) { PostAction.act(user, post, PostActionType.types[:bookmark]) }
+        let(:post_action) { PostActionCreator.create(user, post, :bookmark).post_action }
         let(:admin) { Fabricate(:admin) }
 
         it "returns the right response when post is not bookmarked" do
@@ -783,10 +783,10 @@ describe PostsController do
           user.reload
           expect(user).to be_silenced
 
-          qp = QueuedPost.first
+          rp = ReviewableQueuedPost.first
 
           mod = Fabricate(:moderator)
-          qp.approve!(mod)
+          rp.perform(mod, :approve)
 
           user.reload
           expect(user).not_to be_silenced
@@ -1405,9 +1405,9 @@ describe PostsController do
         post_disagreed = create_post(user: user)
 
         moderator = Fabricate(:moderator)
-        PostAction.act(moderator, post_agreed, PostActionType.types[:spam])
-        PostAction.act(moderator, post_deferred, PostActionType.types[:off_topic])
-        PostAction.act(moderator, post_disagreed, PostActionType.types[:inappropriate])
+        PostActionCreator.create(moderator, post_agreed, :spam)
+        PostActionCreator.create(moderator, post_deferred, :off_topic)
+        PostActionCreator.create(moderator, post_disagreed, :inappropriate)
 
         admin = Fabricate(:admin)
         PostAction.agree_flags!(post_agreed, admin)

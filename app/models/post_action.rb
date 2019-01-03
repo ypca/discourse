@@ -1,10 +1,9 @@
 require_dependency 'rate_limiter'
 require_dependency 'system_message'
+require_dependency 'post_action_creator'
+require_dependency 'post_action_destroyer'
 
 class PostAction < ActiveRecord::Base
-  class AlreadyActed < StandardError; end
-  class FailedToCreatePost < StandardError; end
-
   include RateLimiter::OnCreateRecord
   include Trashable
 
@@ -27,6 +26,7 @@ class PostAction < ActiveRecord::Base
   after_save :update_notifications
   after_create :create_notifications
   after_commit :notify_subscribers
+  validate :ensure_unique_actions, on: :create
 
   def disposed_by_id
     disagreed_by_id || agreed_by_id || deferred_by_id
@@ -270,110 +270,23 @@ class PostAction < ActiveRecord::Base
     topic.posts.where("user_id IN (SELECT id FROM users WHERE moderator OR admin) OR (post_type != :regular_post_type)", regular_post_type: Post.types[:regular]).exists?
   end
 
-  def self.create_message_for_post_action(user, post, post_action_type_id, opts)
-    post_action_type = PostActionType.types[post_action_type_id]
-
-    return unless opts[:message] && [:notify_moderators, :notify_user, :spam].include?(post_action_type)
-
-    title = I18n.t("post_action_types.#{post_action_type}.email_title", title: post.topic.title, locale: SiteSetting.default_locale)
-    body = I18n.t("post_action_types.#{post_action_type}.email_body", message: opts[:message], link: "#{Discourse.base_url}#{post.url}", locale: SiteSetting.default_locale)
-    warning = opts[:is_warning] if opts[:is_warning].present?
-    title = title.truncate(SiteSetting.max_topic_title_length, separator: /\s/)
-
-    opts = {
-      archetype: Archetype.private_message,
-      is_warning: warning,
-      title: title,
-      raw: body
-    }
-
-    if [:notify_moderators, :spam].include?(post_action_type)
-      opts[:subtype] = TopicSubtype.notify_moderators
-      opts[:target_group_names] = target_moderators
-    else
-      opts[:subtype] = TopicSubtype.notify_user
-
-      opts[:target_usernames] =
-        if post_action_type == :notify_user
-          post.user.username
-        elsif post_action_type != :notify_moderators
-          # this is a hack to allow a PM with no recipients, we should think through
-          # a cleaner technique, a PM with myself is valid for flagging
-          'x'
-        end
-    end
-
-    PostCreator.new(user, opts).create!&.id
-  end
-
   def self.limit_action!(user, post, post_action_type_id)
     RateLimiter.new(user, "post_action-#{post.id}_#{post_action_type_id}", 4, 1.minute).performed!
   end
 
-  def self.act(user, post, post_action_type_id, opts = {})
-    limit_action!(user, post, post_action_type_id)
+  def self.act(created_by, post, post_action_type_id, opts = {})
+    Discourse.deprecate("PostAction.act is deprecated. Use `PostActionCreator` instead.")
 
-    begin
-      related_post_id = create_message_for_post_action(user, post, post_action_type_id, opts)
-    rescue ActiveRecord::RecordNotSaved => e
-      raise FailedToCreatePost.new(e.message)
-    end
+    result = PostActionCreator.new(
+      created_by,
+      post,
+      post_action_type_id,
+      message: opts[:message]
+    ).perform
 
-    staff_took_action = opts[:take_action] || false
-
-    targets_topic =
-      if opts[:flag_topic] && post.topic
-        post.topic.reload.posts_count != 1
-      end
-
-    where_attrs = {
-      post_id: post.id,
-      user_id: user.id,
-      post_action_type_id: post_action_type_id
-    }
-
-    action_attrs = {
-      staff_took_action: staff_took_action,
-      related_post_id: related_post_id,
-      targets_topic: !!targets_topic
-    }
-
-    # First try to revive a trashed record
-    post_action = PostAction.where(where_attrs)
-      .with_deleted
-      .where("deleted_at IS NOT NULL")
-      .first
-
-    if post_action
-      post_action.recover!
-      action_attrs.each { |attr, val| post_action.send("#{attr}=", val) }
-      post_action.save
-      PostActionNotifier.post_action_created(post_action)
-    else
-      post_action = create(where_attrs.merge(action_attrs))
-      if post_action && post_action.errors.count == 0
-        BadgeGranter.queue_badge_grant(Badge::Trigger::PostAction, post_action: post_action)
-      end
-    end
-
-    if post_action && PostActionType.notify_flag_type_ids.include?(post_action_type_id)
-      DiscourseEvent.trigger(:flag_created, post_action)
-    end
-
-    GivenDailyLike.increment_for(user.id) if post_action_type_id == PostActionType.types[:like]
-
-    # agree with other flags
-    if staff_took_action
-      PostAction.agree_flags!(post, user)
-      post_action.try(:update_counters)
-    end
-
-    post_action
-  rescue ActiveRecord::RecordNotUnique
-    # can happen despite being .create
-    # since already bookmarked
-    PostAction.where(where_attrs).first
+    result.success? ? result.post_action : nil
   end
+
 
   def self.copy(original_post, target_post)
     cols_to_copy = (column_names - %w{id post_id}).join(', ')
@@ -389,16 +302,12 @@ class PostAction < ActiveRecord::Base
   end
 
   def self.remove_act(user, post, post_action_type_id)
+    Discourse.deprecate(
+      "PostAction.remove_act is deprecated. Use `PostActionDestroyer` instead.",
+      output_in_test: true
+    )
 
-    limit_action!(user, post, post_action_type_id)
-
-    finder = PostAction.where(post_id: post.id, user_id: user.id, post_action_type_id: post_action_type_id)
-    finder = finder.with_deleted.includes(:post) if user.try(:staff?)
-    if action = finder.first
-      action.remove_act!(user)
-      action.post.unhide! if action.staff_took_action
-      GivenDailyLike.decrement_for(user.id) if post_action_type_id == PostActionType.types[:like]
-    end
+    PostActionDestroyer.new(user, post, post_action_type_id).perform
   end
 
   def remove_act!(user)
@@ -449,15 +358,18 @@ class PostAction < ActiveRecord::Base
     end
   end
 
-  before_create do
+  def ensure_unique_actions
     post_action_type_ids = is_flag? ? PostActionType.notify_flag_types.values : post_action_type_id
-    raise AlreadyActed if PostAction.where(user_id: user_id)
+
+    acted = PostAction.where(user_id: user_id)
       .where(post_id: post_id)
       .where(post_action_type_id: post_action_type_ids)
       .where(deleted_at: nil)
       .where(disagreed_at: nil)
       .where(targets_topic: targets_topic)
       .exists?
+
+    errors.add(:post_action_type_id) if acted
   end
 
   # Returns the flag counts for a post, taking into account that some users
@@ -674,10 +586,6 @@ class PostAction < ActiveRecord::Base
   def self.post_action_type_for_post(post_id)
     post_action = PostAction.find_by(deferred_at: nil, post_id: post_id, post_action_type_id: PostActionType.notify_flag_types.values, deleted_at: nil)
     PostActionType.types[post_action.post_action_type_id] if post_action
-  end
-
-  def self.target_moderators
-    Group[:moderators].name
   end
 
 end

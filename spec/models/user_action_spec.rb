@@ -166,13 +166,13 @@ describe UserAction do
     end
 
     it "creates a new stream entry" do
-      PostAction.act(liker, post, PostActionType.types[:like])
+      PostActionCreator.like(liker, post)
       expect(likee_stream.count).to eq(@old_count + 1)
     end
 
     context "successful like" do
       before do
-        PostAction.act(liker, post, PostActionType.types[:like])
+        PostActionCreator.like(liker, post)
         @liker_action = liker.user_actions.find_by(action_type: UserAction::LIKE)
         @likee_action = likee.user_actions.find_by(action_type: UserAction::WAS_LIKED)
       end
@@ -183,7 +183,7 @@ describe UserAction do
         expect(likee.user_stat.reload.likes_received).to eq(1)
         expect(liker.user_stat.reload.likes_given).to eq(1)
 
-        PostAction.remove_act(liker, post, PostActionType.types[:like])
+        PostActionDestroyer.destroy(liker, post, :like)
         expect(likee.user_stat.reload.likes_received).to eq(0)
         expect(liker.user_stat.reload.likes_given).to eq(0)
       end
@@ -199,7 +199,7 @@ describe UserAction do
           expect(@likee_action).not_to eq(nil)
           expect(likee.user_stat.reload.likes_received).to eq(0)
 
-          PostAction.remove_act(liker, post, PostActionType.types[:like])
+          PostActionDestroyer.destroy(liker, post, :like)
           expect(liker.user_stat.reload.likes_given).to eq(0)
           expect(likee.user_stat.reload.likes_received).to eq(0)
         end
@@ -214,7 +214,7 @@ describe UserAction do
       end
 
       it "doesn't add the entry to the stream" do
-        PostAction.act(liker, post, PostActionType.types[:like])
+        PostActionCreator.like(liker, post)
         expect(likee_stream.count).not_to eq(@old_count + 1)
       end
 
@@ -275,7 +275,7 @@ describe UserAction do
     before do
       @post = Fabricate(:post)
       @user = @post.user
-      PostAction.act(@user, @post, PostActionType.types[:bookmark])
+      PostActionCreator.create(@user, @post, :bookmark)
       @action = @user.user_actions.find_by(action_type: UserAction::BOOKMARK)
     end
 
@@ -285,7 +285,7 @@ describe UserAction do
       expect(@action.acting_user_id).to eq(@user.id)
       expect(@action.user_id).to eq(@user.id)
 
-      PostAction.remove_act(@user, @post, PostActionType.types[:bookmark])
+      PostActionDestroyer.destroy(@user, @post, :bookmark)
       expect(@user.user_actions.find_by(action_type: UserAction::BOOKMARK)).to eq(nil)
     end
   end
@@ -319,7 +319,7 @@ describe UserAction do
     end
 
     it 'correctly secures stream' do
-      PostAction.act(user, private_message, PostActionType.types[:bookmark])
+      PostActionCreator.create(user, private_message, :bookmark)
 
       expect(count_bookmarks).to eq(1)
 

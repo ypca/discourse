@@ -1,5 +1,5 @@
 require 'rails_helper'
-require 'post_destroyer'
+require_dependency 'post_destroyer'
 
 describe PostDestroyer do
 
@@ -84,7 +84,7 @@ describe PostDestroyer do
 
       # flag the post, it should not nuke the stub anymore
       topic.recover!
-      PostAction.act(Fabricate(:coding_horror), reply1, PostActionType.types[:spam])
+      PostActionCreator.create(Fabricate(:coding_horror), reply1, :spam)
 
       PostDestroyer.destroy_stubs
 
@@ -219,8 +219,8 @@ describe PostDestroyer do
 
   describe "recovery and post actions" do
     let(:codinghorror) { Fabricate(:coding_horror) }
-    let!(:like) { PostAction.act(codinghorror, post, PostActionType.types[:like]) }
-    let!(:another_like) { PostAction.act(moderator, post, PostActionType.types[:like]) }
+    let!(:like) { PostActionCreator.like(codinghorror, post).post_action }
+    let!(:another_like) { PostActionCreator.like(moderator, post).post_action }
 
     it "restores public post actions" do
       PostDestroyer.new(moderator, post).destroy
@@ -231,7 +231,7 @@ describe PostDestroyer do
     end
 
     it "does not recover previously-deleted actions" do
-      PostAction.remove_act(codinghorror, post, PostActionType.types[:like])
+      PostActionDestroyer.destroy(codinghorror, post, :like)
       expect(PostAction.exists?(id: like.id)).to eq(false)
 
       PostDestroyer.new(moderator, post).destroy
@@ -628,8 +628,8 @@ describe PostDestroyer do
 
   describe "post actions" do
     let(:second_post) { Fabricate(:post, topic_id: post.topic_id) }
-    let!(:bookmark) { PostAction.act(moderator, second_post, PostActionType.types[:bookmark]) }
-    let!(:flag) { PostAction.act(moderator, second_post, PostActionType.types[:off_topic]) }
+    let!(:bookmark) { PostActionCreator.create(moderator, second_post, :bookmark).post_action }
+    let!(:flag) { PostActionCreator.create(moderator, second_post, :off_topic).post_action }
 
     before do
       Jobs::SendSystemMessage.clear
