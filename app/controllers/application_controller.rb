@@ -52,6 +52,7 @@ class ApplicationController < ActionController::Base
   before_action :block_if_requires_login
   before_action :preload_json
   before_action :check_xhr
+  before_action :preconnect_header
   after_action  :add_readonly_header
   after_action  :perform_refresh_session
   after_action  :dont_cache_page
@@ -417,6 +418,14 @@ class ApplicationController < ActionController::Base
 
   def current_homepage
     current_user&.user_option&.homepage || SiteSetting.anonymous_homepage
+  end
+
+  def preconnect_header
+    @preconnect_domains ||= [GlobalSetting.cdn_url.presence, GlobalSetting.s3_cdn_url.presence].uniq.compact.map do |domain|
+      "<#{domain}>; rel=preconnect; crossorigin"
+    end.join(', ')
+
+    response.headers['Link'] = @preconnect_domains if request.format.html? && @preconnect_domains.present?
   end
 
   def serialize_data(obj, serializer, opts = nil)
